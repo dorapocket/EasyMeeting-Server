@@ -76,6 +76,7 @@ this.removeClient=function(room,id){
 this.destroyRoom=function(room){
     delete rooms[room];
 }
+
 this.isTV=function(sid){
     return !!tv[sid];
 }

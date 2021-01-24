@@ -38,6 +38,7 @@ Array.prototype.del=function(n) {　//删除第n项
 }
 const roomController=new RoomController();
 // 信令服务器加载
+// TODO: TV端Token设置
 io.of('/rtc').on('connection', (socket) => {
     socket.emit('VERIFY');
     socket.on('VERIFY_FEEDBACK',data=>{

@@ -37,6 +37,7 @@ function getKey(username){
     console.log('[info] A Client has disconnected. SID:',socket.id);
     try{
     // 掉线的是电视
+    // TODO: 断线重连
     if(rc.isTV(socket.id)){
         let room=rc.getTV(socket.id).room;
         socket.broadcast.to(room).emit('TV_OFFLINE');
@@ -95,8 +96,11 @@ function getKey(username){
   */
   
   // 电视端注册
-  socket.on('TV_REGISTER',()=>{
-      let sroom=rc.createRoom(socket.id);
+  socket.on('TV_REGISTER',(config)=>{
+      let sroom=config.code;
+      if(rc.roomExist(config.code)){
+        sroom=rc.createRoom(socket.id);
+      }
       socket.join(sroom);
       rc.setTV(socket.id,{
           room:sroom,
@@ -107,6 +111,7 @@ function getKey(username){
           projCode:sroom
       });
   });
+
   // 链接到电视端
   socket.on('CONNECT_TO_TV',data=>{
        console.log('[info] Client '+data.username+'  request to regist. Room '+data.projCode+'');
