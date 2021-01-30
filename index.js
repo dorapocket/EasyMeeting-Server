@@ -7,9 +7,11 @@ const server = http.createServer(app);
 const io = socketio(server, { cors: true });
 const RoomController=require('./rtcSignalServer/roomController');
 const WebRTCConnection=require('./rtcSignalServer/rtcUtils');
-const MessageSocketController=require('./messageController/socket');
+const SocketController=require('./appSocket/socketController.js');
+const AppSocketManager=require('./appSocket/appSocketManager.js');
 const Token=require('./authServer/token');
 const token=new Token();
+const socketControl=new SocketController();
 
 var logger = require('morgan');//在控制台中，显示req请求的信息
 var cookieParser = require('cookie-parser');//这就是一个解析Cookie的工具。通过req.cookies可以取到传过来的cookie，并把它们转成对象。
@@ -75,7 +77,8 @@ io.of('/message').on('connection', (socket) => {
         code:200,
         msg:'操作成功',
       });
-      new MessageSocketController(socket);
+      socketControl.setSocket(d.uid,socket);
+      new AppSocketManager(socket,socketControl);
     }else{
       socket.emit('VERIFY_RESPONCE',{
         code:403,

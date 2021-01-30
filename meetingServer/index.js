@@ -254,6 +254,6 @@ function MeetingServer(){
         }
     });
 
-    
+    return router;
 }
 module.exports=MeetingServer

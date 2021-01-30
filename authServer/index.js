@@ -4,8 +4,9 @@ var express = require('express');
 var router = express.Router();
 var Db=require('../utils/db');
 const Token=require('./token');
-const token=new Token();
+const tokenPhaser=new Token();
 var db=new Db();
+const TOKEN_EXPIRED_TIME=1000*60*60*24*15;
 
 router.use('/register',async function(req,res){
     const {username,realname,telephone,email,certificate}=req.query;
@@ -26,12 +27,12 @@ router.use('/register',async function(req,res){
             e,
         });
     }
-    let userToken=token.create({
+    let userToken=tokenPhaser.create({
         uid:stat.insertId,
         realname,
-        expired_time:(Date.now()+1000*60*60*24*15).toString()
+        expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
     });
-    res.cookie('token',userToken,{maxAge: 1000*60*60*24*15, httpOnly: true});
+    res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
     res.json({
         code:200,
         msg:'登录成功',
@@ -47,28 +48,28 @@ router.use('/login',async function(req,res){
         case 'EMAIL':
         case 'TELEPHONE':
             info=await db.query("SELECT * FROM user_auths WHERE IDENTITYTYPE=? AND IDENTIFIER=? AND CREDENTIAL=?",[loginType,username,certificate]);
-            userInf=await db.query("SELECT * FROM users WHERE UID=?",[info[0].UID]);
             if(info.length!=0){
+            userInf=await db.query("SELECT * FROM users WHERE UID=?",[info[0].UID]);
             if(info[0].ISVERIFIED){
-                let userToken=token.create({
+                let userToken=tokenPhaser.create({
                     uid:info[0].UID,
                     realname:userInf[0].REAL_NAME,
-                    expired_time:(Date.now()+1000*60*60*24*15).toString()
+                    expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
                 });
-                res.cookie('token',userToken,{maxAge: 1000*60*60*24*15, httpOnly: true});
+                res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
                 res.json({
                     code:200,
                     msg:'登录成功',
                     token:userToken
                 });
             }else{
-                res.json({
+                res.status(400).json({
                     code:601,
                     msg:'登陆失败，邮箱/手机尚未验证',
                 });
             }
         }else{
-            res.json({
+            res.status(400).json({
                 code:602,
                 msg:'登陆失败，用户名或密码错误',
             });
@@ -82,6 +83,41 @@ router.use('/login',async function(req,res){
             });
     }
 });
+
+// 验证Token有效性,有效则刷新token延长有效期
+router.use('/validToken',function(req,res){
+    const {token}=req.query;
+    let tokenJson=tokenPhaser.parse(token);
+    if(tokenJson){
+        if(tokenJson.expired_time>Date.now()){
+            let userToken=tokenPhaser.create({
+                uid:tokenJson.uid,
+                realname:tokenJson.realname,
+                expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
+            });
+            res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
+            res.status(200).json({
+                code:200,
+                msg:'操作成功',
+                data:{
+                    token:userToken,
+                    uid:tokenJson.uid,
+                    realname:tokenJson.realname,
+                }
+            });
+        }else{
+            res.status(400).json({
+                code:400,
+                msg:'登录过期，请重新登录：Bad Request（400）'
+            });
+        }
+    }else{
+            res.status(400).json({
+                code:400,
+                msg:'错误的Token：Bad Request（400）'
+            });
+    }
+})
 return router;
 }
 module.exports=AuthServer;
