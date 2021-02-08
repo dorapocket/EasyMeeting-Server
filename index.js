@@ -28,7 +28,30 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(sessionManager);
-
+var noAuthPage=['/','/user/login','/user/register'];
+app.use(function(req,res,next){
+  var url=req.originalUrl;
+  if(noAuthPage.indexOf(url)>-1) next();
+  else{
+    if(req.get('Authorization')){
+      let d=token.parse(req.get('Authorization'));
+      if(d&&d.expired_time>Date.now()) next();
+      else{
+        res.status(403).json({
+          code:403,
+          msg:'禁止访问',
+          data:[]
+        });
+      }
+    }else{
+      res.status(401).json({
+        code:401,
+        msg:'登陆过期或未登录，请先登录！',
+        data:[]
+      });
+    }
+  }
+})
 
 
 console.log('[info] Server running, listening 65534.');

@@ -16,9 +16,9 @@ router.use('/register',async function(req,res){
     if(exist.length!=0) {res.json({code:600,msg:'用户已存在'});return;}
     try{
         stat=await db.query("INSERT INTO users (USER_NAME,REAL_NAME,TELEPHONE,EMAIL,STATUS) VALUES (?,?,?,?,?)",[username,realname,telephone,email,true]);
-        await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'EMAIL',email,certificate,false]);
-        await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'TELEPHONE',telephone,certificate,false]);
-        await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'USERNAME',username,certificate,true]);
+        email?await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'EMAIL',email,certificate,false]):'';
+        telephone?await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'TELEPHONE',telephone,certificate,false]):'';
+        username?await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'USERNAME',username,certificate,true]):'';
     }catch(e){
         res.status(500);
         res.json({
@@ -86,10 +86,7 @@ router.use('/login',async function(req,res){
 
 // 验证Token有效性,有效则刷新token延长有效期
 router.use('/validToken',function(req,res){
-    const {token}=req.query;
-    let tokenJson=tokenPhaser.parse(token);
-    if(tokenJson){
-        if(tokenJson.expired_time>Date.now()){
+    let tokenJson=tokenPhaser.parse(req.get('Authorization'));
             let userToken=tokenPhaser.create({
                 uid:tokenJson.uid,
                 realname:tokenJson.realname,
@@ -105,16 +102,28 @@ router.use('/validToken',function(req,res){
                     realname:tokenJson.realname,
                 }
             });
-        }else{
-            res.status(400).json({
-                code:400,
-                msg:'登录过期，请重新登录：Bad Request（400）'
-            });
-        }
+})
+
+// 获取用户信息
+router.use('/userInfo',async function(req,res){
+    let tokenJson=tokenPhaser.parse(req.get('Authorization'));
+            let info=await db.query("SELECT * FROM users WHERE UID=?",[tokenJson.uid]);
+            if(info.length!=0){
+                res.status(200).json({
+                    code:200,
+                    msg:'操作成功',
+                    data:{
+                        uid:info[0].UID,
+                        realname:info[0].REAL_NAME,
+                        username:info[0].USER_NAME,
+                        telephone:info[0].TELEPHONE,
+                        email:info[0].EMAIL
+                    }
+                });
     }else{
-            res.status(400).json({
-                code:400,
-                msg:'错误的Token：Bad Request（400）'
+            res.status(500).json({
+                code:500,
+                msg:'内部错误，请重试'
             });
     }
 })

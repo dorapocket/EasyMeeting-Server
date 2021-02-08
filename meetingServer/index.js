@@ -3,15 +3,15 @@ function MeetingServer(){
     var router = express.Router();
     var Db=require('../utils/db');
     const Token=require('../authServer/token');
+    const DateUtils=require('../utils/date');
+    const du=new DateUtils();
     const tokenManager=new Token();
     var db=new Db();
 
     // 获取用户会议列表
     router.use('/getMeetingList',async function(req,res){
-        const {token}=req.query;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
-            const querySql="SELECT * FROM (( activities LEFT JOIN user_meetings ON activities.AID=user_meetings.AID ) LEFT JOIN meeting_rooms ON activities.MID=meeting_rooms.MID) WHERE activities.UID=?";
+        let d=tokenManager.parse(req.get('Authorization'));
+            const querySql="SELECT * FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE UID=?";
             let exist=await db.query(querySql,[d.uid]);
                 let obj={code:200,msg:"操作成功",data:[]};
                 for(let i=0;i<exist.length;i++){
@@ -21,29 +21,20 @@ function MeetingServer(){
                         mname:exist[i].NAME,
                         theme:exist[i].THEME,
                         date:exist[i].DATE,
-                        time_begin:exist[i].TIME_BEGIN,
-                        time_end:exist[i].TIME_END,
+                        time_begin:exist[i].TIME_BEGIN.getTime(),
+                        time_end:exist[i].TIME_END.getTime(),
                         member:exist[i].MEMBER,
                         remark:exist[i].REMARKS,
                         sponsor:exist[i].SPONSOR,
                     });
                 }
                 res.json(obj);
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
-    
     });
 
     // 获取单个会议信息
     router.use('/getMeetingById',async function(req,res){
-        const {token,aid}=req.query;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
+        const {aid}=req.query;
+        let d=tokenManager.parse(req.get('Authorization'));
             const querySql="SELECT * FROM (( activities LEFT JOIN user_meetings ON activities.AID=user_meetings.AID ) LEFT JOIN meeting_rooms ON activities.MID=meeting_rooms.MID) WHERE activities.AID=?";
             let exist=await db.query(querySql,[aid]);
                 let obj={code:200,msg:"操作成功",data:[]};
@@ -54,78 +45,84 @@ function MeetingServer(){
                         mname:exist[i].NAME,
                         theme:exist[i].THEME,
                         date:exist[i].DATE,
-                        time_begin:exist[i].TIME_BEGIN,
-                        time_end:exist[i].TIME_END,
+                        time_begin:exist[i].TIME_BEGIN.getTime(),
+                        time_end:exist[i].TIME_END.getTime(),
                         member:exist[i].MEMBER,
                         remark:exist[i].REMARKS,
                         sponsor:exist[i].SPONSOR,
                     });
                 }
                 res.json(obj);
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
     
     });
 
     // 创建会议
     router.post('/createMeeting',async function(req,res){
-        const {token,theme,mid,date,time_begin,time_end,member,remark}=req.body;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
-            // TODO: 验证是否有会议重叠
-            const verifySQL='SELECT AID,THEME,SPONSER,TIME_BEGIN, TIME_END FROM activities WHERE MID=? AND DATE=?';
+        try{
+        const {theme,mid,date,time_begin,time_end,member,remark}=req.body;
+        let d=tokenManager.parse(req.get('Authorization'));
+        if(time_begin>time_end){
+            res.status(403).json({
+                code:403,
+                msg:'非法请求，请检查提交的信息是否有错误！',
+                data:[]
+            });
+            return;
+        }
+            const verifySQL="SELECT AID,THEME,SPONSOR,TIME_BEGIN, TIME_END FROM activities WHERE MID=? AND DATE=STR_TO_DATE(?,'%Y-%m-%d')";
             let vers=await db.query(verifySQL,[mid,date]);
             for(let i=0;i<vers.length;i++){
-                if((vers[i].TIME_BEGIN<time_begin&&vers[i].TIME_END>time_begin)||(vers[i].TIME_BEGIN<time_end&&vers[i].TIME_END>time_end)){
+                console.log(vers[i].TIME_BEGIN.getTime(),vers[i].TIME_END.getTime());
+                if(
+                (vers[i].TIME_BEGIN.getTime()<=time_begin&&time_begin<=vers[i].TIME_END.getTime()&&vers[i].TIME_END.getTime()<=time_end)||
+                (time_begin<=vers[i].TIME_BEGIN.getTime()&&vers[i].TIME_BEGIN.getTime()<=time_end&&time_end<=vers[i].TIME_END.getTime())||
+                (vers[i].TIME_BEGIN.getTime()<=time_begin&&time_begin<=time_end&&time_end<=vers[i].TIME_END.getTime())||
+                (time_begin<=vers[i].TIME_BEGIN.getTime()&&vers[i].TIME_BEGIN.getTime()<=vers[i].TIME_END.getTime()&&vers[i].TIME_END.getTime()<=time_end)){
                     res.status(400).json({
                         code:400,
                         msg:"会议冲突",
                         data:{
                             aid:vers[i].AID,
                             theme:vers[i].THEME,
-                            sponser:vers[i].SPONSER,
+                            sponsor:vers[i].SPONSOR,
                             date:vers[i].DATE,
-                            time_begin:vers[i].TIME_BEGIN,
-                            time_end:vers[i].TIME_END
+                            time_begin:vers[i].TIME_BEGIN.getTime(),
+                            time_end:vers[i].TIME_END.getTime()
                         }
                     });
                     return;
                 }
             }
             // TODO: 数据预处理
-            const querySQL='INSERT INTO activities (MID, THEME, DATE, TIME_BEGIN, TIME_END, MEMBER, REMARKS, SPONSOR,SPONSOR_UID) VALUES (?,?,?,?,?,?,?,?,?,?)';
+            const querySQL="INSERT INTO activities (MID, THEME, DATE, TIME_BEGIN, TIME_END, MEMBER, REMARKS, SPONSOR,SPONSOR_UID) VALUES (?,?,STR_TO_DATE(?,'%Y-%m-%d'),?,?,?,?,?,?)";
             const umSQL='INSERT INTO user_meetings (UID,AID,CHECKED) VALUES (?,?,?)';
-            let stat=await db.query(querySQL,[mid,theme,date,time_begin,time_end,member,remark,d.realname,d.uid]);
-            
-            // TODO: 插入用户活动表，member是个数组，待协商
-            // 单独处理发起人
+            let stat=await db.query(querySQL,[mid,theme,date,du.dateFormat(new Date(time_begin),"yyyy-MM-dd hh:mm:ss"),du.dateFormat(new Date(time_end),"yyyy-MM-dd hh:mm:ss"),member,remark,d.realname,d.uid]);
+             // 单独处理发起人
             await db.query(umSQL,[d.uid,stat.insertId,true]);
-            for(let i=0;i<member.length;i++){
-                await db.query(umSQL,[member[i].uid,stat.insertId,false]);
+            let users=JSON.parse(member);
+            for(user of users){
+                let obj=JSON.parse(user);
+                // TODO: 发送消息提醒 obj.uid,obj.realname
+                await db.query(umSQL,[obj.uid,stat.insertId,false]); //设置用户会议
             }
             res.status(200).json({
                 code:200,
                 msg:"创建成功",
             });
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
+    }catch(e){
+        console.log(e);
+        res.status(500).json({
+            code:500,
+            msg:'啊哦，出现了一点问题，给您带来的麻烦我们深表歉意，请稍后重试！',
+            data:[]
+        });
+    }
     });
 
     // 编辑会议
     router.post('/editMeeting',async function(req,res){
-        const {token,aid,theme,mid,date,time_begin,time_end,member,remark}=req.body;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
+        const {aid,theme,mid,date,time_begin,time_end,member,remark}=req.body;
+        let d=tokenManager.parse(req.get('Authorization'));
             let activity=await db.query('SELECT SPONSOR_UID FROM activities WHERE AID=?',[aid]);
             if(activity.length!=0){
                 if(activity[0].SPONSOR_UID==d.uid){
@@ -150,20 +147,12 @@ function MeetingServer(){
                     data:[]
                 });
             }
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
     });
 
     // 删除会议
     router.post('/deleteMeeting',async function(req,res){
-        const {token,aid}=req.body;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
+        const {aid}=req.body;
+        let d=tokenManager.parse(req.get('Authorization'));
             let activity=await db.query('SELECT SPONSOR_UID FROM activities WHERE AID=?',[aid]);
             if(activity.length!=0){
                 if(activity[0].SPONSOR_UID==d.uid){
@@ -190,20 +179,11 @@ function MeetingServer(){
                     data:[]
                 });
             }
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
     });
 
     // 获取会议室
-    router.post('/getMeetingRoomList',async function(req,res){
-        const {token}=req.body;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
+    router.use('/getMeetingRoomList',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
             const querySQL='SELECT * FROM meeting_rooms';
             let result=await db.query(querySQL,[]);
             let obj={code:200,msg:"操作成功",data:[]};
@@ -217,41 +197,43 @@ function MeetingServer(){
                 });
             }
             res.status(200).json(obj);
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
     });
 
     // 获取会议室时间安排表
     router.post('/getMeetingRoomActivities',async function(req,res){
-        const {token,mid,date}=req.body;
-        let d=tokenManager.parse(token);
-        if(d&&d.expired_time<Date.now()){
+        const {mid,date}=req.body;
+        let d=tokenManager.parse(req.get('Authorization'));
             const querySQL='SELECT * FROM activities WHERE MID=? AND DATE=?';
-            // TODO: date参数格式待协商
+            // TODO: date参数格式待协商 2020-01-01
             let result=await db.query(querySQL,[mid,date]);
             let obj={code:200,msg:"操作成功",data:[]};
             for(let i=0;i<result.length;i++){
                 obj.data.push({
                     aid:result[i].AID,
                     theme:result[i].THEME,
-                    time_begin:result[i].TIME_BEGIN,
-                    time_end:result[i].TIME_END,
-                    sponser:result[i].SPONSER
+                    time_begin:result[i].TIME_BEGIN.getTime(),
+                    time_end:result[i].TIME_END.getTime(),
+                    sponsor:result[i].SPONSOR,
+                    sponsor_aid:result[i].SPONSOR_UID
                 });
             }
             res.status(200).json(obj);
-        }else{
-            res.status(401).json({
-                code:401,
-                msg:'登陆过期或未登录，请先登录！',
-                data:[]
-            });
-        }
+    });
+
+    // 获取参会人
+    router.use('/getAllUsers',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
+            const querySQL='SELECT UID,USER_NAME,REAL_NAME FROM users';
+            let result=await db.query(querySQL,[]);
+            let obj={code:200,msg:"操作成功",data:[]};
+            for(let i=0;i<result.length;i++){
+                obj.data.push({
+                    uid:result[i].UID,
+                    realname:result[i].REAL_NAME,
+                    username:result[i].USER_NAME,
+                });
+            }
+            res.status(200).json(obj);
     });
 
     return router;
