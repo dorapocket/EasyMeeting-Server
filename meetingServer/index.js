@@ -11,22 +11,24 @@ function MeetingServer(){
     // 获取用户会议列表
     router.use('/getMeetingList',async function(req,res){
         let d=tokenManager.parse(req.get('Authorization'));
-            const querySql="SELECT * FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE UID=?";
-            let exist=await db.query(querySql,[d.uid]);
-                let obj={code:200,msg:"操作成功",data:[]};
+            const querySql="SELECT DISTINCT a.*,m.NAME FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE UID=? AND DATE >= ?";
+            let exist=await db.query(querySql,[d.uid,du.dateFormat(new Date(),"yyyy-MM-dd")]);
+                let obj={code:200,msg:"操作成功",today:0,data:[]};
                 for(let i=0;i<exist.length;i++){
                     obj.data.push({
                         aid:exist[i].AID,
                         mid:exist[i].MID,
                         mname:exist[i].NAME,
                         theme:exist[i].THEME,
-                        date:exist[i].DATE,
+                        date:exist[i].DATE.getTime(),
                         time_begin:exist[i].TIME_BEGIN.getTime(),
                         time_end:exist[i].TIME_END.getTime(),
-                        member:exist[i].MEMBER,
+                        members:exist[i].MEMBER,
                         remark:exist[i].REMARKS,
                         sponsor:exist[i].SPONSOR,
+                        sponsor_uid:exist[i].SPONSOR_UID
                     });
+                    if(du.dateFormat(exist[i].DATE,"yyyy-MM-dd")==du.dateFormat(new Date(),"yyyy-MM-dd")) obj.today++;
                 }
                 res.json(obj);
     });
@@ -150,8 +152,8 @@ function MeetingServer(){
     });
 
     // 删除会议
-    router.post('/deleteMeeting',async function(req,res){
-        const {aid}=req.body;
+    router.use('/deleteMeeting',async function(req,res){
+        const {aid}=req.query;
         let d=tokenManager.parse(req.get('Authorization'));
             let activity=await db.query('SELECT SPONSOR_UID FROM activities WHERE AID=?',[aid]);
             if(activity.length!=0){

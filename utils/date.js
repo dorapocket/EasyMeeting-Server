@@ -1,5 +1,5 @@
 function DateUtils(){
-this.dateFormat = function(date,fmt) { 
+this.dateFormat = function(date,fmt) {
     var o = { 
        "M+" : date.getMonth()+1,                 //月份 
        "d+" : date.getDate(),                    //日 
