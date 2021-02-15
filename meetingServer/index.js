@@ -216,7 +216,7 @@ function MeetingServer(){
                     time_begin:result[i].TIME_BEGIN.getTime(),
                     time_end:result[i].TIME_END.getTime(),
                     sponsor:result[i].SPONSOR,
-                    sponsor_aid:result[i].SPONSOR_UID
+                    sponsor_uid:result[i].SPONSOR_UID
                 });
             }
             res.status(200).json(obj);

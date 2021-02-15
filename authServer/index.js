@@ -8,12 +8,20 @@ const tokenPhaser=new Token();
 var db=new Db();
 const TOKEN_EXPIRED_TIME=1000*60*60*24*15;
 
-router.use('/register',async function(req,res){
-    const {username,realname,telephone,email,certificate}=req.query;
-    const queryUserSql="SELECT * FROM users WHERE USER_NAME=? OR TELEPHOME=? OR EMAIL=?"
+router.post('/register',async function(req,res){
+    const {username,realname,telephone,email,certificate}=req.body;
+    const queryUserSql="SELECT * FROM users WHERE USER_NAME=? OR TELEPHONE=? OR EMAIL=?"
     let stat;
     let exist=await db.query(queryUserSql,[username,telephone,email]);
-    if(exist.length!=0) {res.json({code:600,msg:'用户已存在'});return;}
+    if(exist.length!=0) {
+        if(exist[0].USER_NAME==username)
+        {res.status(403).json({code:403,msg:'该用户名已存在，请重新输入或转至登录'});return;}
+        if(exist[0].TELEPHONE==telephone)
+        {res.status(403).json({code:403,msg:'该手机已存在，请重新输入或转至登录'});return;}
+        if(exist[0].EMAIL==email)
+        {res.status(403).json({code:403,msg:'该邮箱已存在，请重新输入或转至登录'});return;}
+        return;
+    }
     try{
         stat=await db.query("INSERT INTO users (USER_NAME,REAL_NAME,TELEPHONE,EMAIL,STATUS) VALUES (?,?,?,?,?)",[username,realname,telephone,email,true]);
         email?await db.query('INSERT INTO user_auths (UID,IDENTITYTYPE,IDENTIFIER,CREDENTIAL,ISVERIFIED) VALUES (?,?,?,?,?)',[stat.insertId,'EMAIL',email,certificate,false]):'';
@@ -27,21 +35,15 @@ router.use('/register',async function(req,res){
             e,
         });
     }
-    let userToken=tokenPhaser.create({
-        uid:stat.insertId,
-        realname,
-        expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
-    });
-    res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
     res.json({
         code:200,
-        msg:'登录成功',
-        token:userToken
+        msg:'注册成功',
+        username:username,
     });
 });
 
-router.use('/login',async function(req,res){
-    const {username,certificate,loginType}=req.query;
+router.post('/login',async function(req,res){
+    const {username,certificate,loginType}=req.body;
     let info;
     switch(loginType){
         case 'USERNAME':
@@ -54,7 +56,8 @@ router.use('/login',async function(req,res){
                 let userToken=tokenPhaser.create({
                     uid:info[0].UID,
                     realname:userInf[0].REAL_NAME,
-                    expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
+                    expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString(),
+                    client_type:'client'
                 });
                 res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
                 res.json({
@@ -90,7 +93,8 @@ router.use('/validToken',function(req,res){
             let userToken=tokenPhaser.create({
                 uid:tokenJson.uid,
                 realname:tokenJson.realname,
-                expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString()
+                expired_time:(Date.now()+TOKEN_EXPIRED_TIME).toString(),
+                client_type:'client'
             });
             res.cookie('token',userToken,{maxAge: TOKEN_EXPIRED_TIME, httpOnly: true});
             res.status(200).json({
