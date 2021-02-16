@@ -1,11 +1,7 @@
 function Db(){
     const mysql=require('mysql');
-    const sql=mysql.createConnection({
-    host:'localhost',
-    user:'root',
-    password:'',
-    database:'easymeeting'
-});
+    const sysConfig=require('../server_config.json');
+    const sql=mysql.createConnection(sysConfig.DB_CONFIG);
 sql.connect((err)=>{
     if(err)
     handleSQLErr(err);

@@ -1,0 +1,4 @@
+{
+    "auth_getAccessToken":"https://api.weixin.qq.com/cgi-bin/token",
+    "wxacode_getUnlimited":"https://api.weixin.qq.com/wxa/getwxacodeunlimit"
+}

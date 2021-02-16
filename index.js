@@ -1,5 +1,4 @@
 const express = require('express');
-const session = require("express-session");
 const http = require('http');
 const socketio = require('socket.io');
 const app = express();
@@ -12,25 +11,25 @@ const AppSocketManager = require('./appSocket/appSocketManager.js');
 const Token = require('./authServer/token');
 const token = new Token();
 const socketControl = new SocketController();
+const sysConfig=require('./server_config.json');
 
 var logger = require('morgan');//在控制台中，显示req请求的信息
 var cookieParser = require('cookie-parser');//这就是一个解析Cookie的工具。通过req.cookies可以取到传过来的cookie，并把它们转成对象。
 var cookie = require('cookie');
 var bodyParser = require('body-parser');//node.js 中间件，用于处理 JSON, Raw, Text 和 URL 编码的数据。
-var sessionManager = session({
-  secret: "samantha",
-  resave: false,
-  saveUninitialized: true,
-  cookie: ('name', 'value', { maxAge: 60 * 24 * 15 * 60 * 1000, secure: false })
-});
+
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(sessionManager);
-var noAuthPage = ['/', '/user/login', '/user/register'];
+
+var noAuthPage = ['/', '/user/login', '/user/register','/wechat/getLoginImage'];
 app.use(function (req, res, next) {
   var url = req.originalUrl;
+  if(url.indexOf('?')!=-1){
+    url=url.substr(0,url.indexOf("?"));
+  }
+  console.log(url);
   if (noAuthPage.indexOf(url) > -1) next();
   else {
     if (req.get('Authorization')) {
@@ -54,7 +53,7 @@ app.use(function (req, res, next) {
 })
 
 
-console.log('[info] Server running, listening 65534.');
+console.log('[info] Server running, listening '+sysConfig.LISTEN_PORT+'.');
 Array.prototype.del = function (n) {　//删除第n项
   if (n < 0)
     return this;
@@ -122,6 +121,7 @@ io.of('/rtc').on('connection', (socket) => {
 const userRouter = require('./authServer/index');
 app.use('/user', new userRouter());
 
+
 // 客户端消息socket链接加载
 io.of('/message').on('connection', (socket) => {
   socket.emit('VERIFY');
@@ -149,8 +149,10 @@ io.of('/message').on('connection', (socket) => {
 const meetingRouter = require('./meetingServer/index');
 app.use('/meetings', new meetingRouter());
 
-server.listen(65534);
+const wxRouter = require('./wxServer/index');
+app.use('/wechat', new wxRouter(io));
 
+server.listen(sysConfig.LISTEN_PORT);
 /*
 //解析请求参数
     var params = URL.parse(req.url, true).query;

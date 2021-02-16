@@ -1,11 +1,19 @@
 function SocketController(uid,socket){
-    var sockets={};
+    var sockets={
+        'wxs':{}, // 微信Socket
+        'rtc':{}, // RTC Socket
+        'client':{} // client Socket
+    };
     // uid:socket
-    this.getSocketByUid=function(uid){
+    this.getClientSocketByUid=function(uid){
         return sockets.uid||{};
     }
-    this.setSocket=function(uid,socket){
-        sockets.uid=socket;
+    this.setWXSocket=function(socket){
+        try{
+            sockets.wxs[socket.id]=socket;
+        }catch(e){
+            console.log(e);
+        }
         return true;
     }
 }

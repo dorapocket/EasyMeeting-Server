@@ -1,0 +1,15 @@
+{
+    "AES_TOKEN":"1111111111111111",
+    "LISTEN_PORT":80,
+    "DB_CONFIG":{
+        "host":"your host here",
+        "user":"your db user here",
+        "password":"your password here",
+        "database":"your db name here",
+        "port":3306
+    },
+    "WX_MINIPROGRAM":{
+        "APPID":"your appId here",
+        "APPSECRET":"your appSecret here"
+    }
+}
