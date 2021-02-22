@@ -8,6 +8,31 @@ function MeetingServer(){
     const tokenManager=new Token();
     var db=new Db();
 
+    // 获取我发出的会议列表
+    router.use('/getMyMeetingList',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
+            const querySql="SELECT DISTINCT a.*,m.NAME,m.POSITION FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE SPONSOR_UID=?";
+            let exist=await db.query(querySql,[d.uid]);
+                let obj={code:200,msg:"操作成功",data:[]};
+                for(let i=0;i<exist.length;i++){
+                    obj.data.push({
+                        aid:exist[i].AID,
+                        mid:exist[i].MID,
+                        mname:exist[i].NAME,
+                        mpos:exist[i].POSITION,
+                        theme:exist[i].THEME,
+                        date:exist[i].DATE.getTime(),
+                        time_begin:exist[i].TIME_BEGIN.getTime(),
+                        time_end:exist[i].TIME_END.getTime(),
+                        members:exist[i].MEMBER,
+                        remark:exist[i].REMARKS,
+                        sponsor:exist[i].SPONSOR,
+                        sponsor_uid:exist[i].SPONSOR_UID,
+                        create_time:exist[i].CREATE_TIME
+                    });
+                }
+                res.json(obj);
+    });
     // 获取用户会议列表
     router.use('/getMeetingList',async function(req,res){
         let d=tokenManager.parse(req.get('Authorization'));
@@ -62,6 +87,7 @@ function MeetingServer(){
     router.post('/createMeeting',async function(req,res){
         try{
         const {theme,mid,date,time_begin,time_end,member,remark}=req.body;
+        console.log(req.body);
         let d=tokenManager.parse(req.get('Authorization'));
         if(time_begin>time_end){
             res.status(403).json({
