@@ -23,7 +23,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-var noAuthPage = ['/', '/user/login', '/user/register','/wechat/getLoginImage'];
+var noAuthPage = ['/', '/user/login', '/user/register','/wechat/getLoginImage','/wechat/mplogin'];
 app.use(function (req, res, next) {
   var url = req.originalUrl;
   if(url.indexOf('?')!=-1){

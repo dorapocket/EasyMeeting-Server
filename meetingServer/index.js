@@ -8,6 +8,24 @@ function MeetingServer(){
     const tokenManager=new Token();
     var db=new Db();
 
+    // 创建会议室
+    router.post('/createMeetingRoom',async function(req,res){
+            let {name,maxpeople,position,description} = req.body;
+            const querySql="INSERT INTO meeting_rooms (NAME,MAXPEOPLE,POSITION,DESCRIPTION) VALUES (?,?,?,?)";
+            try {
+                let result = await db.query(querySql,[name,maxpeople,position,description]);
+                res.json({
+                    code:200,
+                    msg:'操作成功'
+                });
+            }catch(e){
+                res.status(500).json({
+                    code:500,
+                    msg:'内部服务器错误'
+                });
+            }
+    });
+
     // 获取我发出的会议列表
     router.use('/getMyMeetingList',async function(req,res){
         let d=tokenManager.parse(req.get('Authorization'));
@@ -36,7 +54,7 @@ function MeetingServer(){
     // 获取用户会议列表
     router.use('/getMeetingList',async function(req,res){
         let d=tokenManager.parse(req.get('Authorization'));
-            const querySql="SELECT DISTINCT a.*,m.NAME FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE UID=? AND DATE >= ?";
+            const querySql="SELECT DISTINCT a.*,m.NAME,m.POSITION FROM (activities as a LEFT JOIN user_meetings as u ON a.AID=u.AID LEFT JOIN meeting_rooms m ON a.MID=m.MID) WHERE UID=? AND DATE >= ? ORDER BY TIME_BEGIN";
             let exist=await db.query(querySql,[d.uid,du.dateFormat(new Date(),"yyyy-MM-dd")]);
                 let obj={code:200,msg:"操作成功",today:0,data:[]};
                 for(let i=0;i<exist.length;i++){
@@ -44,6 +62,7 @@ function MeetingServer(){
                         aid:exist[i].AID,
                         mid:exist[i].MID,
                         mname:exist[i].NAME,
+                        mpos:exist[i].POSITION,
                         theme:exist[i].THEME,
                         date:exist[i].DATE.getTime(),
                         time_begin:exist[i].TIME_BEGIN.getTime(),
@@ -225,6 +244,19 @@ function MeetingServer(){
                 });
             }
             res.status(200).json(obj);
+    });
+
+    // 删除会议室
+    router.use('/deleteMeetingRoom',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
+        let {mid}=req.query;
+            const querySQL='DELETE FROM meeting_rooms WHERE MID=?';
+            try{
+            await db.query(querySQL,[mid]);
+            res.status(200).json({code:200,msg:"操作成功"});
+            }catch(e){
+                res.status(500).json({code:500,msg:"内部服务器错误"});
+            }
     });
 
     // 获取会议室时间安排表
