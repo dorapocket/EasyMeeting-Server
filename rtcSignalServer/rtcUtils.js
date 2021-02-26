@@ -5,9 +5,9 @@ function WebRTCConnection(socket, rc) {
     const Token = require('../authServer/token');
     const tokenManager = new Token();
     var db = new Db();
-    const DateUtils=require('../utils/date');
-    const du=new DateUtils();
-    const request=require('request');
+    const DateUtils = require('../utils/date');
+    const du = new DateUtils();
+    const request = require('request');
 
     function md5Crypto(password) {
         const hash = crypto.createHash('md5')
@@ -16,9 +16,9 @@ function WebRTCConnection(socket, rc) {
         return md5Password;
     }
 
-    function getKey(username,isLongTurn) {
+    function getKey(username, isLongTurn) {
         let request_key = '0159efb52565fe55a54898954d0f95b9';
-        let time = isLongTurn?(Date.now() + 1000 * 60 * 60 * 24).toString():(Date.now() + 365*1*1000 * 60 * 60 * 24).toString();
+        let time = isLongTurn ? (Date.now() + 1000 * 60 * 60 * 24).toString() : (Date.now() + 365 * 1 * 1000 * 60 * 60 * 24).toString();
         let uname = time + ':' + username;
         let hmac = crypto.createHmac("sha1", request_key);
         let result = hmac.update(uname).digest("Base64");
@@ -28,7 +28,7 @@ function WebRTCConnection(socket, rc) {
         }
     }
     socket.on('CONFIG', (data) => {
-        let key = getKey(data.username,false);
+        let key = getKey(data.username, false);
         console.log("Config Sended:", key);
         socket.emit("CONFIG_FEEDBACK", {
             config: {
@@ -119,51 +119,48 @@ function WebRTCConnection(socket, rc) {
         let { token, code } = config;
         let d = tokenManager.parse(token);
         if (d && d.did) {
-            let sroom = code;
-            if (rc.roomExist(config.code)) {
-                sroom = rc.createRoom(socket.id);
-            }
+            let sroom = rc.createRoom(socket.id,code);
             socket.join(sroom);
             rc.setTV(socket.id, {
                 room: sroom,
                 socket: socket,
             });
             console.log('[info] TV register success code:', sroom);
-            let queryMeetingRoomSql="SELECT * FROM meeting_rooms AS m LEFT JOIN devices AS d ON m.MID=d.MID WHERE DID=?";
-            let meetingResult=await db.query(queryMeetingRoomSql,[d.did]);
-            let queryActivitiesSql="SELECT * FROM activities WHERE MID=? AND DATE=?";
-            if(meetingResult.length!==0&&meetingResult[0].MID){
-                let activitiesResult=await db.query(queryActivitiesSql,[meetingResult[0].MID,du.dateFormat(new Date(),"yyyy-MM-dd")]);
-                let activityData=[];
-                for(let i=0;i<activitiesResult.length;i++){
+            let queryMeetingRoomSql = "SELECT * FROM meeting_rooms AS m LEFT JOIN devices AS d ON m.MID=d.MID WHERE DID=?";
+            let meetingResult = await db.query(queryMeetingRoomSql, [d.did]);
+            let queryActivitiesSql = "SELECT * FROM activities WHERE MID=? AND DATE=?";
+            if (meetingResult.length !== 0 && meetingResult[0].MID) {
+                let activitiesResult = await db.query(queryActivitiesSql, [meetingResult[0].MID, du.dateFormat(new Date(), "yyyy-MM-dd")]);
+                let activityData = [];
+                for (let i = 0; i < activitiesResult.length; i++) {
                     activityData.push({
-                        aid:activitiesResult[i].AID,
-                        theme:activitiesResult[i].THEME,
-                        time_begin:activitiesResult[i].TIME_BEGIN.getTime(),
-                        time_end:activitiesResult[i].TIME_END.getTime(),
-                        sponsor:activitiesResult[i].SPONSOR,
+                        aid: activitiesResult[i].AID,
+                        theme: activitiesResult[i].THEME,
+                        time_begin: activitiesResult[i].TIME_BEGIN.getTime(),
+                        time_end: activitiesResult[i].TIME_END.getTime(),
+                        sponsor: activitiesResult[i].SPONSOR,
                     });
                 }
-                let key = getKey(meetingResult[0].MID,true);
-                let backgroundImage=[];
-                request('https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=5',function (error, response, body) {
+                let key = getKey(meetingResult[0].MID, true);
+                let backgroundImage = [];
+                request('https://cn.bing.com/HPImageArchive.aspx?format=js&idx=0&n=5', function (error, response, body) {
                     if (!error && response.statusCode == 200) {
-                      let imgs=JSON.parse(body).images;
-                      for(let img of imgs){
-                        backgroundImage.push("https://cn.bing.com"+img.url);
-                      }
+                        let imgs = JSON.parse(body).images;
+                        for (let img of imgs) {
+                            backgroundImage.push("https://cn.bing.com" + img.url);
+                        }
                     }
                     socket.emit('TV_INFO_FEEDBACK', {
                         projCode: sroom,
                         meetingRoom: {
-                            mid:meetingResult[0].MID,
-                            name:meetingResult[0].NAME,
-                            maxpeople:meetingResult[0].MAXPEOPLE,
-                            pos:meetingResult[0].POSITION,
-                            desc:meetingResult[0].DESCRIPTION
+                            mid: meetingResult[0].MID,
+                            name: meetingResult[0].NAME,
+                            maxpeople: meetingResult[0].MAXPEOPLE,
+                            pos: meetingResult[0].POSITION,
+                            desc: meetingResult[0].DESCRIPTION
                         },
                         activities: activityData,
-                        iceConfig:{
+                        iceConfig: {
                             iceServers: [
                                 {
                                     urls: "turn:turn.lgyserver.top:3478?transport=udp",
@@ -179,20 +176,20 @@ function WebRTCConnection(socket, rc) {
                             ],
                             iceCandidatePoolSize: 2,
                         },
-                        background:backgroundImage,
+                        background: backgroundImage,
                     });
-                  });
-            }else{
-                socket.emit('TV_COMMAND',{
-                    cmd:'error',
-                    msg:'获取会议室信息失败'
+                });
+            } else {
+                socket.emit('TV_COMMAND', {
+                    cmd: 'error',
+                    msg: '获取会议室信息失败'
                 })
                 socket.disconnect();
             }
         } else {
-            socket.emit('TV_COMMAND',{
-                cmd:'error',
-                msg:'身份校验失败，请重新设置设备！'
+            socket.emit('TV_COMMAND', {
+                cmd: 'error',
+                msg: '身份校验失败，请重新设置设备！'
             })
             socket.disconnect();
         }

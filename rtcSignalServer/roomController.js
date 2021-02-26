@@ -21,10 +21,10 @@ this.generateCode=function() {
       }
       return code;
 }
-this.createRoom=(id)=>{
-    let code=this.generateCode();
+this.createRoom=(id,codeExpect)=>{
+    let code=codeExpect;
     while(rooms[code]){
-        if(rooms[code].users.length==0) break;
+        //if(rooms[code].users.length==0) break;
         code=this.generateCode();
     }
     rooms[code]={
