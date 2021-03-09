@@ -1,33 +1,50 @@
 const express = require('express');
-const http = require('http');
 const socketio = require('socket.io');
+const cors = require('cors');
+const sysConfig = require('./server_config.json');
 const app = express();
-const server = http.createServer(app);
+var server;
+var net;
+if (sysConfig.SERVER.use_https) {
+  net = require('https');
+  const fs = require('fs');
+  const options = {
+    cert: fs.readFileSync(sysConfig.SERVER.https_cert),
+    key: fs.readFileSync(sysConfig.SERVER.https_private_key),
+  };
+  server = net.createServer(options, app);
+}else{
+  net = require('http');
+  server = net.createServer(app);
+}
 const io = socketio(server, { cors: true });
 const RoomController = require('./rtcSignalServer/roomController');
 const WebRTCConnection = require('./rtcSignalServer/rtcUtils');
 const SocketController = require('./appSocket/socketController.js');
 const AppSocketManager = require('./appSocket/appSocketManager.js');
-const Token = require('./authServer/token');
+const Token = require('./utils/token');
 const token = new Token();
 const socketControl = new SocketController();
-const sysConfig=require('./server_config.json');
-
+const WX = require('./utils/wx');
+const wxController = new WX();
 var logger = require('morgan');//在控制台中，显示req请求的信息
 var cookieParser = require('cookie-parser');//这就是一个解析Cookie的工具。通过req.cookies可以取到传过来的cookie，并把它们转成对象。
 var cookie = require('cookie');
 var bodyParser = require('body-parser');//node.js 中间件，用于处理 JSON, Raw, Text 和 URL 编码的数据。
 
+app.use(cors());
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-var noAuthPage = ['/', '/user/login', '/user/register','/wechat/getLoginImage','/wechat/mplogin'];
+var noAuthPage = ['/','/socket.io', '/user/login', '/user/register',
+  '/wechat/getLoginImage', '/wechat/mplogin',
+  '/deivce/validDeviceToken', '/device/getConfigImage'];
 app.use(function (req, res, next) {
   var url = req.originalUrl;
-  if(url.indexOf('?')!=-1){
-    url=url.substr(0,url.indexOf("?"));
+  if (url.indexOf('?') != -1) {
+    url = url.substr(0, url.indexOf("?"));
   }
   console.log(url);
   if (noAuthPage.indexOf(url) > -1) next();
@@ -36,6 +53,7 @@ app.use(function (req, res, next) {
       let d = token.parse(req.get('Authorization'));
       if (d && d.expired_time > Date.now()) next();
       else {
+        console.log(d);
         res.status(403).json({
           code: 403,
           msg: '禁止访问',
@@ -52,8 +70,6 @@ app.use(function (req, res, next) {
   }
 })
 
-
-console.log('[info] Server running, listening '+sysConfig.LISTEN_PORT+'.');
 Array.prototype.del = function (n) {　//删除第n项
   if (n < 0)
     return this;
@@ -73,12 +89,6 @@ io.of('/rtc').on('connection', (socket) => {
   socket.on('VERIFY_FEEDBACK', data => {
     clearTimeout(timelimit);
     let d = token.parse(data);
-    // FIXME: 测试用生成token
-    socket.emit("TEST_TOKEN_TV",token.create({
-      client_type:'tv',
-      did:1,
-      mid:1
-    }));
     if (d) {
       if (d.client_type == "client" && d.expired_time > Date.now()) {
         socket.emit('VERIFY_RESPONCE', {
@@ -87,14 +97,14 @@ io.of('/rtc').on('connection', (socket) => {
         });
         console.log("RTC Client request received, verify success.");
         new WebRTCConnection(socket, roomController);
-      } else if(d.client_type == "tv"){
+      } else if (d.client_type == "tv") {
         socket.emit('VERIFY_RESPONCE', {
           code: 200,
           msg: '操作成功',
         });
         console.log("RTC TV request received, verify success.");
         new WebRTCConnection(socket, roomController);
-      }else{
+      } else {
         socket.emit('VERIFY_RESPONCE', {
           code: 403,
           msg: '身份核验失败,请重新登录',
@@ -149,32 +159,15 @@ io.of('/message').on('connection', (socket) => {
 const meetingRouter = require('./meetingServer/index');
 app.use('/meetings', new meetingRouter());
 
+const messageRouter = require('./messageServer/index');
+app.use('/message', new messageRouter(io));
+
+const deviceRouter = require('./deviceServer/index');
+app.use('/device', new deviceRouter(io, wxController));
+
 const wxRouter = require('./wxServer/index');
-app.use('/wechat', new wxRouter(io));
+app.use('/wechat', new wxRouter(io, wxController));
 
 server.listen(sysConfig.LISTEN_PORT);
-/*
-//解析请求参数
-    var params = URL.parse(req.url, true).query;
-      var addSqlParams = [params.id, params.name, params.sex];
-
-      //增
-    connection.query(addSql,addSqlParams,function (err, result) {
-        if(err){
-         console.log('[INSERT ERROR] - ',err.message);
-         return;
-        }
-    });
-
-    //查
-    connection.query(sql,function (err, result) {
-        if(err){
-          console.log('[SELECT ERROR] - ',err.message);
-          return;
-        }
-        console.log(params.id);
-
-        //把搜索值输出
-       res.send(result);
-    });
-    */
+console.log('[info] Server running, listening ' + sysConfig.LISTEN_PORT + '.');
+console.log('HTTPS mode:',sysConfig.SERVER.use_https);

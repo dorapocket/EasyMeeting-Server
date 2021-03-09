@@ -1,10 +1,9 @@
-function WxServer(io) {
+function WxServer(io,wx) {
     var express = require('express');
     var router = express.Router();
     var Db = require('../utils/db');
-    const WXAPI = require('./wxapi.json');
     const sysConfig = require('../server_config.json');
-    const Token = require('../authServer/token');
+    const Token = require('../utils/token');
     const oriRequest = require("request");
     var fs = require('fs');
     const Request = require('../utils/request');
@@ -14,8 +13,6 @@ function WxServer(io) {
     var db = new Db();
     const TOKEN_EXPIRED_TIME = 1000 * 60 * 60 * 24 * 15;
 
-    let accessKey;
-    let accessKeyExpireTime = 0;
     let wxTempLoginPool = {};
     let socketid2token = {};
 
@@ -42,18 +39,8 @@ function WxServer(io) {
     }
     };
     async function getAccessKey() {
-        if (new Date().valueOf() > accessKeyExpireTime) {
-            let response = await request.getSync(WXAPI.auth_getAccessToken, {
-                grant_type: "client_credential",
-                appid: sysConfig.WX_MINIPROGRAM.APPID,
-                secret: sysConfig.WX_MINIPROGRAM.APPSECRET,
-            });
-            let data = JSON.parse(response.body)
-            accessKey = data.access_token;
-            accessKeyExpireTime = new Date().valueOf() + data.expires_in * 1000;
-        }
-        console.log("[info] Current WX AccessKey:", accessKey);
-        return accessKey;
+        let key=await wx.getAccessKey();
+        return key
     }
 
     async function getWXLoginTempToken(socket) {
@@ -92,7 +79,7 @@ function WxServer(io) {
             let key = await getAccessKey();
             oriRequest.post({
                 timeout: 5000,
-                url: WXAPI.wxacode_getUnlimited + '?access_token=' + key,
+                url: wx.getWXAPI().wxacode_getUnlimited + '?access_token=' + key,
                 json: false,
                 body: JSON.stringify({
                     scene: loginTempToken,
@@ -123,7 +110,7 @@ function WxServer(io) {
 
     router.post('/mplogin', async function (req, res) {
         let { token, username, password } = req.body;
-        let response = await request.getSync(WXAPI.auth_code2Session, {
+        let response = await request.getSync(wx.getWXAPI().auth_code2Session, {
             appid: sysConfig.WX_MINIPROGRAM.APPID,
             secret: sysConfig.WX_MINIPROGRAM.APPSECRET,
             js_code: token,
@@ -249,6 +236,12 @@ function WxServer(io) {
                     });
                     wxTempLoginPool[code].socket.emit('LOGIN_RESULT',{code:200,token:userToken});
                     wxTempLoginPool[code].socket.disconnect();
+        }else{
+            res.json({
+                code: 408,
+                msg: '登录超时，请重新扫码登录',
+                data:{}
+            });
         }
     });
     return router;

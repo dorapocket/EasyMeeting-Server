@@ -3,7 +3,7 @@ function AuthServer(){
 var express = require('express');
 var router = express.Router();
 var Db=require('../utils/db');
-const Token=require('./token');
+const Token=require('../utils/token');
 const tokenPhaser=new Token();
 var db=new Db();
 const TOKEN_EXPIRED_TIME=1000*60*60*24*15;

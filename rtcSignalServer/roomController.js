@@ -21,9 +21,13 @@ this.generateCode=function() {
       }
       return code;
 }
+this.validCode=function(code){
+    if(!code||!code=='undefined'||code.length!=6) return false
+    return true
+}
 this.createRoom=(id,codeExpect)=>{
     let code=codeExpect;
-    while(rooms[code]){
+    while(!this.validCode(code)||rooms[code]){
         //if(rooms[code].users.length==0) break;
         code=this.generateCode();
     }

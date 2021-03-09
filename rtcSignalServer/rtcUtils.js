@@ -2,7 +2,7 @@
 function WebRTCConnection(socket, rc) {
     const crypto = require('crypto');
     var Db = require('../utils/db');
-    const Token = require('../authServer/token');
+    const Token = require('../utils/token');
     const tokenManager = new Token();
     var db = new Db();
     const DateUtils = require('../utils/date');
