@@ -4,7 +4,9 @@ var tv={};
 var client={};
 //{id:{socket,room,username}}
 var rooms={};
-//{code:{users:[{id,username}],tv:tvid}}
+//{code:{users:[{id,username}],tv:tvid,mid:mid}}
+var mid2socket={};
+//{mid:socket};
 const TV_STATUS={
     CONNECT:1,
     DISCONNECT:2
@@ -78,6 +80,8 @@ this.removeClient=function(room,id){
     // TODO
 }
 this.destroyRoom=function(room){
+    let mid=rooms[room].mid;
+    delete mid2socket[mid];
     delete rooms[room];
 }
 
@@ -93,6 +97,23 @@ this.deleteClient=function(sid){
 this.roomExist=function(room){
     return !!rooms[room];
 }
-
+this.bindTVandRoom=function(mid,roomid,socket){
+    if(mid2socket[mid]){
+        try{
+            mid2socket[mid].disconnect();
+            delete mid2socket[mid];
+        }catch(e){}
+    }
+    mid2socket[mid]=socket;
+    rooms[roomid].mid=mid;
+}
+this.sendCommand=function(mid,cmd,data){
+    if(!mid2socket[mid]) break;
+    let socket=mid2socket[mid];
+    socket.emit("COMMAND",{
+        cmd:cmd,
+        data:data
+    });
+}
 }
 module.exports=RoomController;

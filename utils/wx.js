@@ -23,5 +23,6 @@ function WX(){
     this.getWXAPI=function(){
         return WXAPI;
     }
+
 }
 module.exports=WX;

@@ -1,19 +1,22 @@
-function MeetingServer(){
+function MeetingServer(rc){
     var express = require('express');
     var router = express.Router();
     var Db=require('../utils/db');
     const Token=require('../utils/token');
     const DateUtils=require('../utils/date');
+    const Mail=require('../utils/mail');
     const du=new DateUtils();
     const tokenManager=new Token();
     var db=new Db();
+    const mailer=new Mail();
 
     // 创建会议室
     router.post('/createMeetingRoom',async function(req,res){
             let {name,maxpeople,position,description} = req.body;
-            const querySql="INSERT INTO meeting_rooms (NAME,MAXPEOPLE,POSITION,DESCRIPTION) VALUES (?,?,?,?)";
+            let d=tokenManager.parse(req.get('Authorization'));
+            const querySql="INSERT INTO meeting_rooms (NAME,MAXPEOPLE,POSITION,DESCRIPTION,ADMIN_UID) VALUES (?,?,?,?,?)";
             try {
-                let result = await db.query(querySql,[name,maxpeople,position,description]);
+                let result = await db.query(querySql,[name,maxpeople,position,description,d.uid]);
                 res.json({
                     code:200,
                     msg:'操作成功'
@@ -25,7 +28,60 @@ function MeetingServer(){
                 });
             }
     });
-
+    // 我管理的会议室列表
+    router.get('/adminMeetingRoomList',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
+        const querySql="SELECT * FROM meeting_rooms WHERE ADMIN_UID=?";
+        try {
+            let result = await db.query(querySql,[d.uid]);
+            let data=[];
+            for(let i=0;i<result.length;i++){
+                data.push({
+                    mid:result[i].MID,
+                    name:result[i].NAME,
+                    max_people:result[i].MAXPEOPLE,
+                    position:result[i].POSITION,
+                    desc:result[i].DESCRIPTION
+                });
+            }
+            res.json({
+                code:200,
+                msg:'操作成功',
+                data:data,
+            });
+        }catch(e){
+            res.status(500).json({
+                code:500,
+                msg:'内部服务器错误'
+            });
+        }
+});
+    // 删除会议室
+    router.get('/deleteMeetingRoom',async function(req,res){
+        let {mid} = req.query;
+        let d=tokenManager.parse(req.get('Authorization'));
+        const querySql="SELECT * FROM meeting_rooms WHERE MID=? AND ADMIN_UID=?";
+        try {
+            let result = await db.query(querySql,[mid,d.uid]);
+            if(result.length==0){
+                res.json({
+                    code:400,
+                    msg:'无法删除，权限不足或会议室不存在！'
+                });
+            }else{
+                await db.query("DELETE FROM meeting_rooms WHERE MID=? AND ADMIN_UID=?",[mid,d.uid]);
+                res.json({
+                code:200,
+                msg:'操作成功'
+            });
+            }
+        }catch(e){
+            res.status(500).json({
+                code:500,
+                msg:'内部服务器错误'
+            });
+        }
+});
     // 获取我发出的会议列表
     router.use('/getMyMeetingList',async function(req,res){
         let d=tokenManager.parse(req.get('Authorization'));
@@ -152,6 +208,33 @@ function MeetingServer(){
                 if(obj.uid!=d.uid){
                     await db.query(umSQL,[obj.uid,stat.insertId,false]); //设置用户会议
                     await db.query(msgSQL,[obj.uid,"MEETING_NOTICE",0,stat.insertId,""]); // 发送通知
+
+                    // 发mail
+                    let ures=await db.query("SELECT EMAIL,REAL_NAME FROM users WHERE UID=?",[obj.uid]);
+                    let mres=await db.query("SELECT NAME,POSITION FROM meeting_rooms WHERE MID=?",[mid]);
+                    mailer.sendMeetingMail(ures[0].EMAIL,{
+                        to:ures[0].REAL_NAME,
+                        from:d.realname,
+                        datetime:du.dateFormat(new Date(time_begin),"yyyy-MM-dd hh:mm:ss"),
+                        mname:mres[0].NAME,
+                        mpos:mres[0].POSITION,
+                        theme:theme,
+                    });
+
+                    // 更新到TV端
+                    try{
+                    rc.sendCommand(mid,"NEW_ACTIVITIES",
+                        {
+                            aid: stat.insertId,
+                            theme: theme,
+                            time_begin: new Date(time_begin).getTime(),
+                            time_end: new Date(time_end).getTime(),
+                            sponsor: d.realname,
+                        }
+                    );
+                    }catch(e){
+                        console.log('Send to TV Error:',e)
+                    }
                 }
             }
             res.status(200).json({

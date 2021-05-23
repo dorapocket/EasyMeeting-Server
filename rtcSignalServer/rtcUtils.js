@@ -150,6 +150,7 @@ function WebRTCConnection(socket, rc) {
                             backgroundImage.push("https://cn.bing.com" + img.url);
                         }
                     }
+                    rc.bindTVandRoom(meetingResult[0].MID,sroom,socket);
                     socket.emit('TV_INFO_FEEDBACK', {
                         projCode: sroom,
                         meetingRoom: {

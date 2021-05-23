@@ -27,13 +27,13 @@ function MeetingServer(io) {
                         mname: exist[0].NAME,
                         mpos:exist[0].POSITION,
                         theme: exist[0].THEME,
-                        date: exist[0].DATE,
-                        time_begin: exist[0].TIME_BEGIN.getTime(),
-                        time_end: exist[0].TIME_END.getTime(),
+                        date: exist[0].DATE.valueOf(),
+                        time_begin: exist[0].TIME_BEGIN.valueOf(),
+                        time_end: exist[0].TIME_END.valueOf(),
                         member: exist[0].MEMBER,
                         remark: exist[0].REMARKS,
                         sponsor: exist[0].SPONSOR,
-                        msgTime:msg.CREATE_TIME
+                        msgTime:msg.CREATE_TIME.valueOf()
                     }
                 else return false;
         }
@@ -41,7 +41,7 @@ function MeetingServer(io) {
     router.use('/unreadMessage', async function (req, res) {
         // 获取会议通知
         let d = tokenManager.parse(req.get('Authorization'));
-        const querySQL = 'SELECT * FROM messages WHERE UID=? AND READ_STATUS=?';
+        const querySQL = 'SELECT * FROM messages WHERE UID=? AND READ_STATUS=? LIMIT 20';
         let result = await db.query(querySQL, [d.uid, 0]);
         let rtData = { code: 200, msg: "操作成功", data: [] };
         for (let i = 0; i < result.length; i++) {

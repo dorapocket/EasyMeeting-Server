@@ -6,8 +6,8 @@
   "scripts": {
     "start": "nodemon index.js",
     "forever": "forever -a start -l forever.log -o out.log -e err.log index.js",
-    "forever-stop":"forever stop index.js",
-    "turn-server":"turnserver -o -a -f -v -r lgy",
+    "forever-stop": "forever stop index.js",
+    "turn-server": "turnserver -o -a -f -v -r lgy",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "dorapocket",
@@ -20,6 +20,7 @@
     "express-session": "^1.17.1",
     "morgan": "^1.10.0",
     "mysql": "^2.18.1",
+    "nodemailer": "^6.5.0",
     "request": "^2.88.2",
     "socket.io": "^3.0.5",
     "socket.io-client": "^3.0.5"

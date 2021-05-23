@@ -157,7 +157,7 @@ io.of('/message').on('connection', (socket) => {
 });
 
 const meetingRouter = require('./meetingServer/index');
-app.use('/meetings', new meetingRouter());
+app.use('/meetings', new meetingRouter(roomController));
 
 const messageRouter = require('./messageServer/index');
 app.use('/message', new messageRouter(io));
