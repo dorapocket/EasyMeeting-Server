@@ -1,4 +1,4 @@
-function WxServer(io,wx) {
+function WxServer(io, wx) {
     var express = require('express');
     var router = express.Router();
     var Db = require('../utils/db');
@@ -7,6 +7,8 @@ function WxServer(io,wx) {
     const oriRequest = require("request");
     var fs = require('fs');
     const Request = require('../utils/request');
+    const DateUtils=require('../utils/date');
+    const du=new DateUtils();
     const request = new Request();
     const tokenPhaser = new Token();
     const crypto = require('crypto');
@@ -17,29 +19,29 @@ function WxServer(io,wx) {
     let socketid2token = {};
 
     async function getIPInfo(req) {
-        ipStr=req.handshake.address;
+        ipStr = req.handshake.address;
         var ipReg = /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/;
         if (ipStr.split(',').length > 0) {
             ipStr = ipStr.split(',')[0]
         }
         var ip = ipReg.exec(ipStr);
-        
-        try{
-        let pos=await request.getSync("https://sp0.baidu.com/8aQDcjqpAAV3otqbppnN2DJv/api.php?query="+ip[0]+"&co=&resource_id=6006&t=1555898284898&ie=utf8&oe=utf8&format=json&tn=baidu",{});
-        let d=JSON.parse(pos.body);
-        return {
-            ip:ip[0]?ip[0]:'未知',
-            pos:d.data[0].location?d.data[0].location:'未知'
+
+        try {
+            let pos = await request.getSync("https://sp0.baidu.com/8aQDcjqpAAV3otqbppnN2DJv/api.php?query=" + ip[0] + "&co=&resource_id=6006&t=1555898284898&ie=utf8&oe=utf8&format=json&tn=baidu", {});
+            let d = JSON.parse(pos.body);
+            return {
+                ip: ip[0] ? ip[0] : '未知',
+                pos: d.data[0].location ? d.data[0].location : '未知'
+            }
+        } catch (e) {
+            return {
+                ip: ip[0] ? ip[0] : '未知',
+                pos: '未知'
+            }
         }
-    }catch(e){
-        return {
-            ip:ip[0]?ip[0]:'未知',
-            pos:'未知'
-        }
-    }
     };
     async function getAccessKey() {
-        let key=await wx.getAccessKey();
+        let key = await wx.getAccessKey();
         return key
     }
 
@@ -48,12 +50,12 @@ function WxServer(io,wx) {
         while (wxTempLoginPool[code]) {
             code = crypto.createHash('md5').update(String(new Date() + 'ffghbvbfwe')).digest("hex").substr(3, 16);
         }
-        let ip=await getIPInfo(socket);
-        console.log('Request ip info:',ip);
+        let ip = await getIPInfo(socket);
+        console.log('Request ip info:', ip);
         wxTempLoginPool[code] = {
-            socket:socket,
-            ip:ip.ip,
-            pos:ip.pos
+            socket: socket,
+            ip: ip.ip,
+            pos: ip.pos
         }
         socketid2token[socket.id] = code;
         console.log("[info] WX login code generated:", code);
@@ -72,7 +74,7 @@ function WxServer(io,wx) {
 
     router.use('/getLoginImage', async function (req, res) {
         let { loginTempToken } = req.query;
-        
+
         if (wxTempLoginPool[loginTempToken]) {
             // fs.writeFile('./tempLoginImage/'+loginTempToken+'.png');
             var stream = fs.createWriteStream(__dirname + '/tempLoginImage/' + loginTempToken + '.png');
@@ -83,7 +85,7 @@ function WxServer(io,wx) {
                 json: false,
                 body: JSON.stringify({
                     scene: loginTempToken,
-                    page:"pages/login/scanLogin/index",
+                    page: "pages/login/scanLogin/index",
                     line_color: { "r": 0, "g": 0, "b": 0 },
                     is_hyaline: false
                 })
@@ -189,60 +191,100 @@ function WxServer(io,wx) {
         }
     });
 
-    router.use('/getPCLoginInfo',function(req,res){
-        let {code}=req.query;
-        if(wxTempLoginPool[code]&&wxTempLoginPool[code].socket.connected){
+    router.use('/getPCLoginInfo', function (req, res) {
+        let { code } = req.query;
+        if (wxTempLoginPool[code] && wxTempLoginPool[code].socket.connected) {
             wxTempLoginPool[code].socket.emit('WXLOGIN_ALREADY_SCAN');
-        res.status(200).json({
-            code:200,
-            msg:'操作成功',
-            data:{
-                pcCode:code,
-                ip:wxTempLoginPool[code].ip,
-                from:wxTempLoginPool[code].pos,
-            }
-        });
-    }else{
-        res.status(403).json({
-            code:403,
-            msg:'登录错误，请重试',
-            data:{
-                pcCode:'',
-                ip:'未知',
-                from:'未知'
-            }
-        });
-    }
+            res.status(200).json({
+                code: 200,
+                msg: '操作成功',
+                data: {
+                    pcCode: code,
+                    ip: wxTempLoginPool[code].ip,
+                    from: wxTempLoginPool[code].pos,
+                }
+            });
+        } else {
+            res.status(403).json({
+                code: 403,
+                msg: '登录错误，请重试',
+                data: {
+                    pcCode: '',
+                    ip: '未知',
+                    from: '未知'
+                }
+            });
+        }
     });
-    router.use('/confirmPCLogin',async function(req,res){
-        let {code}=req.query;
-        let d=tokenPhaser.parse(req.get('Authorization'));
-        if(d.uid&&wxTempLoginPool[code]&&wxTempLoginPool[code].socket.connected){
-                    let userInf = await db.query("SELECT * FROM users WHERE UID=?", [d.uid]);
-                    let userToken = tokenPhaser.create({
-                        uid: d.uid,
-                        realname: userInf[0].REAL_NAME,
-                        expired_time: (Date.now() + TOKEN_EXPIRED_TIME).toString(),
-                        client_type: 'client'
-                    });
-                    res.cookie('token', userToken, { maxAge: TOKEN_EXPIRED_TIME, httpOnly: true });
-                    res.json({
-                        code: 200,
-                        msg: '登录成功',
-                        data:{
-                            username:userInf[0].USER_NAME,
-                            realname:userInf[0].REAL_NAME,
-                        }
-                    });
-                    wxTempLoginPool[code].socket.emit('LOGIN_RESULT',{code:200,token:userToken});
-                    wxTempLoginPool[code].socket.disconnect();
-        }else{
+    router.use('/confirmPCLogin', async function (req, res) {
+        let { code } = req.query;
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        if (d.uid && wxTempLoginPool[code] && wxTempLoginPool[code].socket.connected) {
+            let userInf = await db.query("SELECT * FROM users WHERE UID=?", [d.uid]);
+            let userToken = tokenPhaser.create({
+                uid: d.uid,
+                realname: userInf[0].REAL_NAME,
+                expired_time: (Date.now() + TOKEN_EXPIRED_TIME).toString(),
+                client_type: 'client'
+            });
+            res.cookie('token', userToken, { maxAge: TOKEN_EXPIRED_TIME, httpOnly: true });
+            res.json({
+                code: 200,
+                msg: '登录成功',
+                data: {
+                    username: userInf[0].USER_NAME,
+                    realname: userInf[0].REAL_NAME,
+                }
+            });
+            wxTempLoginPool[code].socket.emit('LOGIN_RESULT', { code: 200, token: userToken });
+            wxTempLoginPool[code].socket.disconnect();
+        } else {
             res.json({
                 code: 408,
                 msg: '登录超时，请重新扫码登录',
-                data:{}
+                data: {}
             });
         }
+    });
+    router.use('/getCouldCheckinList', async function (req, res) {
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        const query = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<'?' AND a.TIME_BEGIN>'?'";
+        let meetingList = await db.query(query, [d.uid,du.dateFormat(new Date()+new Date(Date.now()+60*10),'yyyy-MM-dd hh:mm:ss'),du.dateFormat(new Date()+new Date(Date.now()-60*10),'yyyy-MM-dd hh:mm:ss')]);
+        let couldCheckList=[];
+        meetingList.forEach(r => {
+            couldCheckList.push({
+                aid:r.AID,
+                mname:r.THEME,
+                time_begin:r.TIME_BEGIN.valueOf(),
+                time_end:r.TIME_END.valueOf()
+            });
+        });
+        res.status(200).json({
+            code:200,
+            msg:'操作成功',
+            data:couldCheckList
+        });
+    });
+    router.use('/checkIn', async function (req, res) {
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        let {aid} = req.query;
+        const verifyQuery = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<'?' AND a.TIME_BEGIN>'?' AND u.AID=?";
+        let verifyList = await db.query(verifyQuery, [d.uid,du.dateFormat(new Date()+new Date(Date.now()+60*10),'yyyy-MM-dd hh:mm:ss'),du.dateFormat(new Date()+new Date(Date.now()-60*10),'yyyy-MM-dd hh:mm:ss')],aid);
+        if(verifyList.length!==0){}
+        let couldCheckList=[];
+        meetingList.forEach(r => {
+            couldCheckList.push({
+                aid:r.AID,
+                mname:r.THEME,
+                time_begin:r.TIME_BEGIN.valueOf(),
+                time_end:r.TIME_END.valueOf()
+            });
+        });
+        res.status(200).json({
+            code:200,
+            msg:'操作成功',
+            data:couldCheckList
+        });
     });
     return router;
 }
