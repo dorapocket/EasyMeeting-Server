@@ -94,9 +94,9 @@ function DeviceServer(io, wx) {
                     client_type: 'tv',
                     did: result.insertId,
                     mid: mid,
-                    expired_time:Date.now()+1000*60*24*365
+                    expired_time: Date.now() + 1000 * 60 * 24 * 365
                 });
-                configPool[configCode].socket.emit("INIT_COMPLETE",{token:token});
+                configPool[configCode].socket.emit("INIT_COMPLETE", { token: token });
                 res.status(200).json({
                     code: 200,
                     msg: "绑定成功",
@@ -131,7 +131,7 @@ function DeviceServer(io, wx) {
                     client_type: 'tv',
                     did: d.did,
                     mid: d.mid,
-                    expired_time:Date.now()+1000*60*24*365
+                    expired_time: Date.now() + 1000 * 60 * 24 * 365
                 })
             });
         } else {
@@ -145,69 +145,69 @@ function DeviceServer(io, wx) {
     // 查询设备
     router.use('/getAllDevice', async function (req, res) {
         let d = tokenManager.parse(req.get('Authorization'));
-        if(!d.uid) {
+        if (!d.uid) {
             res.status(400).json({
                 code: 400,
                 msg: '登录类型错误',
-                data:mdata
+                data: mdata
             });
         }
-            const sql='SELECT * FROM devices d LEFT JOIN meeting_rooms m WHERE d.mid=m.mid AND d.ADMIN_UID=?';
-            try{
-                let result = await db.query(sql,[d.uid]);
-                let mdata=[];
-                result.forEach(r => {
-                    mdata.push({
-                        did:r.DID,
-                        mid:r.MID,
-                        extra:r.EXTRA,
-                        createTime:r.CREATE_TIME,
-                        mname:r.NAME,
-                        mpos:r.POSITION
-                    });
+        const sql = 'SELECT * FROM devices d LEFT JOIN meeting_rooms m WHERE d.mid=m.mid AND d.ADMIN_UID=?';
+        try {
+            let result = await db.query(sql, [d.uid]);
+            let mdata = [];
+            result.forEach(r => {
+                mdata.push({
+                    did: r.DID,
+                    mid: r.MID,
+                    extra: r.EXTRA,
+                    createTime: r.CREATE_TIME,
+                    mname: r.NAME,
+                    mpos: r.POSITION
                 });
-                res.status(200).json({
-                    code: 200,
-                    msg: '操作成功',
-                    data:mdata
-                });
-            }catch(e){
-                console.error('Get device error : ',e);
-                res.status(500).json({
-                    code:500,
-                    msg:'内部服务器错误'
-                });
-            }
+            });
+            res.status(200).json({
+                code: 200,
+                msg: '操作成功',
+                data: mdata
+            });
+        } catch (e) {
+            console.error('Get device error : ', e);
+            res.status(500).json({
+                code: 500,
+                msg: '内部服务器错误'
+            });
+        }
 
     });
 
-        // 删除设备
-        router.use('/deleteDevice', async function (req, res) {
-            let d = tokenManager.parse(req.get('Authorization'));
-            let {did}=req.query;
-            if(!d.uid) {
-                res.status(400).json({
-                    code: 400,
-                    msg: '登录类型错误',
-                    data:mdata
-                });return;
-            }
-                const sql='DELETE FROM devices WHERE ADMIN_UID=? AND DID=?';
-                try{
-                    let result = await db.query(sql,[d.uid,did]);
-                    res.status(200).json({
-                        code: 200,
-                        msg: '操作成功',
-                    });
-                }catch(e){
-                    console.error('Delete device error : ',e);
-                    res.status(500).json({
-                        code:500,
-                        msg:'内部服务器错误'
-                    });
-                }
-    
-        });
+    // 删除设备
+    router.use('/grabRoomInfo', async function (req, res) {
+        let d = tokenManager.parse(req.get('Authorization'));
+        let { did } = req.query;
+        if (!d.uid) {
+            res.status(400).json({
+                code: 400,
+                msg: '登录类型错误',
+                data: mdata
+            }); return;
+        }
+        const sql = 'DELETE FROM devices WHERE ADMIN_UID=? AND DID=?';
+        try {
+            let result = await db.query(sql, [d.uid, did]);
+            res.status(200).json({
+                code: 200,
+                msg: '操作成功',
+            });
+        } catch (e) {
+            console.error('Delete device error : ', e);
+            res.status(500).json({
+                code: 500,
+                msg: '内部服务器错误'
+            });
+        }
+
+    });
 
     return router;
 }

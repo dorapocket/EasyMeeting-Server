@@ -7,8 +7,8 @@ function WxServer(io, wx) {
     const oriRequest = require("request");
     var fs = require('fs');
     const Request = require('../utils/request');
-    const DateUtils=require('../utils/date');
-    const du=new DateUtils();
+    const DateUtils = require('../utils/date');
+    const du = new DateUtils();
     const request = new Request();
     const tokenPhaser = new Token();
     const crypto = require('crypto');
@@ -246,46 +246,255 @@ function WxServer(io, wx) {
             });
         }
     });
+
+    // 设备专属小程序码
+    router.use('/getDeviceWxaCode', async function (req, res) {
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        if (d && d.did) {
+            var stream = fs.createWriteStream(__dirname + '/tempDeviceImage/Device' + d.did + '.png');
+            let key = await getAccessKey();
+            oriRequest.post({
+                timeout: 5000,
+                url: wx.getWXAPI().wxacode_getUnlimited + '?access_token=' + key,
+                json: false,
+                body: JSON.stringify({
+                    scene: d.did,
+                    page: "pages/device/index",
+                    line_color: { "r": 0, "g": 0, "b": 0 },
+                    is_hyaline: false
+                })
+            }).pipe(stream).on('close', () => {
+                console.log('download ok!');
+                res.sendFile(__dirname + '/tempDeviceImage/Device' + d.did + '.png');
+                setTimeout(function () {
+                    fs.unlink(__dirname + '/tempDeviceImage/Device' + d.did + '.png', err => {
+                        if (err) {
+                            console.error(err);
+                        } else {
+                            console.log('File ' + __dirname + '/tempDeviceImage/Device' + d.did + '.png deleted');
+                        }
+                    });
+                }, 10000);
+            });
+        } else {
+            res.status(403).json({
+                code: 403,
+                msg: "登录Token有误或已过期。"
+            });
+        }
+
+    });
+
+    // 获取设备信息
+    router.use('/getDeviceInfo', async function (req, res) {
+        let { did } = req.query;
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        const roomsQuery = "SELECT d.MID,d.ADMIN_UID,m.NAME,m.POSITION FROM devices d LEFT JOIN meeting_rooms m ON d.MID=m.MID WHERE d.DID=?";
+        let roomInfo = await db.query(roomsQuery, [did]);
+        if (roomInfo.length != 0) {
+            res.json({
+                code: 200,
+                msg: '操作成功',
+                data: {
+                    mname: roomInfo[0].NAME,
+                    pos: roomInfo[0].POSITION,
+                    admin_uid: roomInfo[0].ADMIN_UID,
+                    mid: roomInfo[0].MID
+                }
+            });
+        } else {
+            res.json({
+                code: 400,
+                msg: '设备不存在',
+            });
+        }
+
+    });
+
+    // 可签到的会议信息
     router.use('/getCouldCheckinList', async function (req, res) {
         let d = tokenPhaser.parse(req.get('Authorization'));
-        const query = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<'?' AND a.TIME_BEGIN>'?'";
-        let meetingList = await db.query(query, [d.uid,du.dateFormat(new Date()+new Date(Date.now()+60*10),'yyyy-MM-dd hh:mm:ss'),du.dateFormat(new Date()+new Date(Date.now()-60*10),'yyyy-MM-dd hh:mm:ss')]);
-        let couldCheckList=[];
-        meetingList.forEach(r => {
-            couldCheckList.push({
-                aid:r.AID,
-                mname:r.THEME,
-                time_begin:r.TIME_BEGIN.valueOf(),
-                time_end:r.TIME_END.valueOf()
+        let { mid } = req.query;
+        const query = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND a.TIME_BEGIN>STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND u.CHECKIN_STAT=? AND a.MID=?";
+        let meetingList = await db.query(query, [d.uid, du.dateFormat(new Date(Date.now() + 60 * 10000), 'yyyy-MM-dd hh:mm:ss'), du.dateFormat(new Date(Date.now() - 60 * 10000), 'yyyy-MM-dd hh:mm:ss'), false, mid]);
+        if (meetingList.length != 0) {
+            let couldCheckObj = {
+                aid: meetingList[0].AID,
+                sponsor: meetingList[0].SPONSOR,
+                mname: meetingList[0].THEME,
+                time_begin: meetingList[0].TIME_BEGIN.valueOf(),
+                time_end: meetingList[0].TIME_END.valueOf()
+            };
+            res.status(200).json({
+                code: 200,
+                msg: '发现会议，请尽快签到！',
+                data: couldCheckObj
             });
-        });
-        res.status(200).json({
-            code:200,
-            msg:'操作成功',
-            data:couldCheckList
-        });
+            return
+        } else {
+            res.status(200).json({
+                code: 200,
+                msg: '没有需要签到的会议哦～',
+            });
+            return
+        }
+
     });
+
+    // 已经有人来了，不能抢占的列表
+    let arrivedFlag = {};
+    // 签到
     router.use('/checkIn', async function (req, res) {
         let d = tokenPhaser.parse(req.get('Authorization'));
-        let {aid} = req.query;
-        const verifyQuery = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<'?' AND a.TIME_BEGIN>'?' AND u.AID=?";
-        let verifyList = await db.query(verifyQuery, [d.uid,du.dateFormat(new Date()+new Date(Date.now()+60*10),'yyyy-MM-dd hh:mm:ss'),du.dateFormat(new Date()+new Date(Date.now()-60*10),'yyyy-MM-dd hh:mm:ss')],aid);
-        if(verifyList.length!==0){}
-        let couldCheckList=[];
-        meetingList.forEach(r => {
-            couldCheckList.push({
-                aid:r.AID,
-                mname:r.THEME,
-                time_begin:r.TIME_BEGIN.valueOf(),
-                time_end:r.TIME_END.valueOf()
+        let { aid } = req.query;
+        const verifyQuery = "SELECT * FROM user_meetings u LEFT JOIN activities a ON u.AID=a.AID WHERE u.UID=? AND a.TIME_BEGIN<STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND a.TIME_BEGIN>STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND u.AID=?";
+        let verifyList = await db.query(verifyQuery, [d.uid, du.dateFormat(new Date(Date.now() + 60 * 10000), 'yyyy-MM-dd hh:mm:ss'), du.dateFormat(new Date(Date.now() - 60 * 10000), 'yyyy-MM-dd hh:mm:ss'), aid]);
+        if (verifyList.length !== 0) {
+            // 确实有这个东西
+            const checkInSQL = "UPDATE user_meetings SET CHECKIN_STAT=? WHERE UID=? AND AID=?";
+            await db.query(checkInSQL, [true, d.uid, aid]);
+            if (!arrivedFlag[aid]) {
+                const updateArriveSQL = "UPDATE activities SET ARRIVED=? WHERE AID=?";
+                await db.query(updateArriveSQL, [true, aid]);
+                arrivedFlag[aid] = true;
+            }
+            res.status(200).json({
+                code: 200,
+                msg: '操作成功',
             });
-        });
-        res.status(200).json({
-            code:200,
-            msg:'操作成功',
-            data:couldCheckList
-        });
+            return 
+        } else {
+            // 没有这玩意
+            res.status(200).json({
+                code: 400,
+                msg: '该会议未到签到时间或会议ID有误，请重试',
+                data: couldCheckList
+            });
+            return 
+        }
     });
+
+
+    // 抢占
+    router.use('/grabRoomInfo', async function (req, res) {
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        let { mid } = req.query;
+        const queryURL = "SELECT * FROM activities WHERE MID=? AND TIME_BEGIN<STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND TIME_END>STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND ARRIVED=? AND GRAB=?";
+        let doingMeetings = await db.query(queryURL, [mid, du.dateFormat(new Date(Date.now()), 'yyyy-MM-dd hh:mm:ss'), du.dateFormat(new Date(Date.now()), 'yyyy-MM-dd hh:mm:ss'), false,false]);
+        if (doingMeetings.length != 0) {
+            // 有没人来的会议
+            const isParticipationSQL = "SELECT * FROM user_meetings WHERE UID=? AND AID=?";
+            let isParticipation = await db.query(isParticipationSQL, [d.uid, doingMeetings[0].AID]);
+            if (isParticipation.length != 0) {
+                // 用户就是参会者 抢什么抢
+                res.status(200).json({
+                    code: 200,
+                    msg: '操作成功',
+                    data: {
+                        type: "GO_CHECKIN",
+                        msg: "您是当前会议的参会者，请赶快签到，不然会议室就要被抢走咯！"
+                    }
+                })
+            } else {
+                // 可以抢
+                res.status(200).json({
+                    code: 200,
+                    msg: '操作成功',
+                    data: {
+                        type: "COULD_GRAB",
+                        msg: "人都不在？可以抢占当前会议哦！",
+                        currentMeeting: {
+                            aid: doingMeetings[0].AID,
+                            theme: doingMeetings[0].THEME,
+                            sponsor: doingMeetings[0].SPONSOR,
+                            time_begin: doingMeetings[0].TIME_BEGIN.valueOf(),
+                            time_end: doingMeetings[0].TIME_END.valueOf(),
+                        }
+                    }
+                });
+            }
+        } else {
+            res.status(200).json({
+                code: 200,
+                msg: '操作成功',
+                data: {
+                    type: "NO_MEETING",
+                    msg: "没有可以抢占的会议，请直接预约会议"
+                }
+            })
+        }
+    });
+
+    // 抢占会议室
+    router.use('/grabRoom', async function (req, res) {
+        let d = tokenPhaser.parse(req.get('Authorization'));
+        let { mid } = req.query;
+        const queryURL = "SELECT * FROM activities WHERE MID=? AND TIME_BEGIN<STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND TIME_END>STR_TO_DATE(?,'%Y-%m-%d %H:%i:%s') AND ARRIVED=? AND GRAB=?";
+        let doingMeetings = await db.query(queryURL, [mid, du.dateFormat(new Date(Date.now()), 'yyyy-MM-dd hh:mm:ss'), du.dateFormat(new Date(Date.now()), 'yyyy-MM-dd hh:mm:ss'), false,false]);
+        if (doingMeetings.length != 0) {
+            // 有没人来的会议
+            const isParticipationSQL = "SELECT * FROM user_meetings WHERE UID=? AND AID=?";
+            let isParticipation = await db.query(isParticipationSQL, [d.uid, doingMeetings[0].AID]);
+            if (isParticipation.length != 0) {
+                // 用户就是参会者 抢什么抢
+                res.status(200).json({
+                    code: 400,
+                    msg: '抢占失败',
+                    data: {
+                        type: "GO_CHECKIN",
+                        msg: "您是当前会议的参会者，请赶快签到，不然会议室就要被抢走咯！"
+                    }
+                })
+                return
+            } else {
+                // 可以抢
+                const grabSQL = 'UPDATE activities SET GRAB=? WHERE AID=?';
+                try {
+                    await db.query(grabSQL, [true, doingMeetings[0].AID]);
+                    if(sysConfig.MAIL.ENABLED){
+                        let ures=await db.query("SELECT EMAIL,REAL_NAME FROM users WHERE UID=?",[doingMeetings[0].SPONSOR_UID]);
+                        let mres=await db.query("SELECT NAME,POSITION FROM meeting_rooms WHERE MID=?",[mid]);
+                        mailer.sendGrabMail(ures[0].EMAIL,{
+                            to:ures[0].REAL_NAME,
+                            from:d.realname,
+                            datetime:du.dateFormat(new Date(doingMeetings[0].TIME_BEGIN.valueOf()),"yyyy-MM-dd hh:mm:ss"),
+                            theme:doingMeetings[0].THEME,
+                        });
+                    }
+                } catch (e) {
+                    console.error(e);
+                    res.status(500).json({
+                        code: 500,
+                        msg: '内部服务器错误'
+                    });
+                    return
+                }
+
+                res.status(200).json({
+                    code: 200,
+                    msg: '抢占成功',
+                    data: {
+                        type: "DONE",
+                        msg: `抢占成功，已释放当前会议${sysConfig.MAIL.ENABLED ? '并邮件通知发起人' : ""}，您可以重新预约`,
+                        time_begin: doingMeetings[0].TIME_BEGIN.valueOf(),
+                        time_end: doingMeetings[0].TIME_END.valueOf(),
+                    }
+                });
+                return
+            }
+        } else {
+            res.status(200).json({
+                code: 400,
+                msg: '抢占失败',
+                data: {
+                    type: "NO_MEETING",
+                    msg: "没有可以抢占的会议，请直接预约会议"
+                }
+            })
+            return 
+        }
+    });
+
     return router;
 }
 module.exports = WxServer

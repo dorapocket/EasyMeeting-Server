@@ -7,6 +7,7 @@ function MeetingServer(rc){
     const Mail=require('../utils/mail');
     const du=new DateUtils();
     const tokenManager=new Token();
+    const config=require('../server_config.json')
     var db=new Db();
     const mailer=new Mail();
 
@@ -172,8 +173,8 @@ function MeetingServer(rc){
             });
             return;
         }
-            const verifySQL="SELECT AID,THEME,SPONSOR,TIME_BEGIN, TIME_END FROM activities WHERE MID=? AND DATE=STR_TO_DATE(?,'%Y-%m-%d')";
-            let vers=await db.query(verifySQL,[mid,date]);
+            const verifySQL="SELECT AID,THEME,SPONSOR,TIME_BEGIN, TIME_END,GRAB FROM activities WHERE MID=? AND DATE=STR_TO_DATE(?,'%Y-%m-%d') AND GRAB=?";
+            let vers=await db.query(verifySQL,[mid,date,false]);
             for(let i=0;i<vers.length;i++){
                 console.log(vers[i].TIME_BEGIN.getTime(),vers[i].TIME_END.getTime());
                 if(
@@ -210,7 +211,8 @@ function MeetingServer(rc){
                     await db.query(msgSQL,[obj.uid,"MEETING_NOTICE",0,stat.insertId,""]); // 发送通知
 
                     // 发mail
-                    let ures=await db.query("SELECT EMAIL,REAL_NAME FROM users WHERE UID=?",[obj.uid]);
+                    if(config.MAIL.ENABLED){
+                    try{let ures=await db.query("SELECT EMAIL,REAL_NAME FROM users WHERE UID=?",[obj.uid]);
                     let mres=await db.query("SELECT NAME,POSITION FROM meeting_rooms WHERE MID=?",[mid]);
                     mailer.sendMeetingMail(ures[0].EMAIL,{
                         to:ures[0].REAL_NAME,
@@ -219,8 +221,8 @@ function MeetingServer(rc){
                         mname:mres[0].NAME,
                         mpos:mres[0].POSITION,
                         theme:theme,
-                    });
-
+                    });}catch(e){console.error(e)}
+                }
                     // 更新到TV端
                     try{
                     rc.sendCommand(mid,"NEW_ACTIVITIES",
