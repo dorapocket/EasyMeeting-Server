@@ -19,6 +19,10 @@ this.connect=function(){
     });
 }
 this.query=function(sqld,paraArray){
+    sql.connect((err)=>{
+        // if(err)
+        // handleSQLErr(err);
+    });
     return new Promise((reslove,reject)=>{
         sql.query(sqld,paraArray,(err,result,fields)=>{
             if(err) reject(err);

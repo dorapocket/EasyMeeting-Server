@@ -108,7 +108,7 @@ this.bindTVandRoom=function(mid,roomid,socket){
     rooms[roomid].mid=mid;
 }
 this.sendCommand=function(mid,cmd,data){
-    if(!mid2socket[mid]) break;
+    if(!mid2socket[mid]) return;
     let socket=mid2socket[mid];
     socket.emit("COMMAND",{
         cmd:cmd,

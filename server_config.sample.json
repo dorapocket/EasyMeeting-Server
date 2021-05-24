@@ -1,15 +1,33 @@
 {
-    "AES_TOKEN":"1111111111111111",
+    "SERVER":{
+        "use_https":true,
+        "https_private_key":"*.pem",
+        "https_cert":"*.pem"
+    },
+    "AES_CONFIG":{
+        "key": "yourkey",
+        "iv": "iv", 
+        "padding": "PKCS7Padding" 
+    },
+    "AES_TOKEN":"your token",
+    "AES_BIAS":"",
     "LISTEN_PORT":80,
     "DB_CONFIG":{
-        "host":"your host here",
-        "user":"your db user here",
-        "password":"your password here",
-        "database":"your db name here",
+        "host":"localhost",
+        "user":"user",
+        "password":"pwd",
+        "database":"db",
         "port":3306
     },
     "WX_MINIPROGRAM":{
-        "APPID":"your appId here",
-        "APPSECRET":"your appSecret here"
+        "APPID":"yourid",
+        "APPSECRET":"yoursecret"
+    },
+    "MAIL":{
+        "ENABLED":false,
+        "HOST":"smtp.*",
+        "USER":"*@*",
+        "PASS":"pwd",
+        "PORT":465
     }
 }
