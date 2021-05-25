@@ -51,6 +51,7 @@ app.use(function (req, res, next) {
   else {
     if (req.get('Authorization')) {
       let d = token.parse(req.get('Authorization'));
+      // if(d&&typeof d == 'string') d=JSON.parse(d);
       if (d && d.expired_time > Date.now()) next();
       else {
         console.log(d);

@@ -223,22 +223,23 @@ function MeetingServer(rc){
                         theme:theme,
                     });}catch(e){console.error(e)}
                 }
-                    // 更新到TV端
-                    try{
-                    rc.sendCommand(mid,"NEW_ACTIVITIES",
-                        {
-                            aid: stat.insertId,
-                            theme: theme,
-                            time_begin: new Date(time_begin).getTime(),
-                            time_end: new Date(time_end).getTime(),
-                            sponsor: d.realname,
-                        }
-                    );
-                    }catch(e){
-                        console.log('Send to TV Error:',e)
-                    }
+                    
                 }
             }
+            // 更新到TV端
+            try{
+                rc.sendCommand(mid,"NEW_ACTIVITIES",
+                    {
+                        aid: stat.insertId,
+                        theme: theme,
+                        time_begin: new Date(time_begin).getTime(),
+                        time_end: new Date(time_end).getTime(),
+                        sponsor: d.realname,
+                    }
+                );
+                }catch(e){
+                    console.log('Send to TV Error:',e)
+                }
             res.status(200).json({
                 code:200,
                 msg:"创建成功",
