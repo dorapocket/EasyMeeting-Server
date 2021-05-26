@@ -103,6 +103,7 @@ function MeetingServer(rc){
                         remark:exist[i].REMARKS,
                         sponsor:exist[i].SPONSOR,
                         sponsor_uid:exist[i].SPONSOR_UID,
+                        isGrab:exist[i].GRAB,
                         create_time:exist[i].CREATE_TIME
                     });
                 }
@@ -386,6 +387,38 @@ function MeetingServer(rc){
                 });
             }
             res.status(200).json(obj);
+    });
+
+    // 获取用户回复信息
+    router.use('/queryUserReply',async function(req,res){
+        let d=tokenManager.parse(req.get('Authorization'));
+        let {aid} = req.query;
+        const verifySQL = "SELECT * FROM activities WHERE AID=? AND SPONSOR_UID=?"
+        let verify = await db.query(verifySQL,[aid,d.uid])
+        if(verify.length==0){
+            res.status(412).json({
+                code:412,
+                msg:'您不是该会议的发起人，只有发起人能查看参会状态哦！'
+            })
+            return
+        }
+        const querySQL = "SELECT DISTINCT um.*,u.REAL_NAME FROM user_meetings um LEFT JOIN users u ON u.UID=um.UID WHERE AID=?";
+        let info = [];
+        let query = await db.query(querySQL,[aid]);
+        query.forEach(d => {
+            info.push({
+                uid:d.UID,
+                checked:d.CHECKED,
+                reply:d.USR_REPLY,
+                chechin:d.CHECKIN_STAT,
+                name:d.REAL_NAME
+            })
+        });
+        res.status(200).json({
+            code:200,
+            msg:"操作成功",
+            data:info
+        });
     });
 
     return router;
