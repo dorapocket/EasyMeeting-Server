@@ -414,9 +414,12 @@ function MeetingServer(rc){
                 name:d.REAL_NAME
             })
         });
+        const getTheme = "SELECT * FROM activities WHERE AID=?";
+        let a = await db.query(getTheme,[aid]); 
         res.status(200).json({
             code:200,
             msg:"操作成功",
+            theme:a[0].THEME,
             data:info
         });
     });
