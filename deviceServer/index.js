@@ -152,7 +152,7 @@ function DeviceServer(io, wx) {
                 data: mdata
             });
         }
-        const sql = 'SELECT * FROM devices d LEFT JOIN meeting_rooms m WHERE d.mid=m.mid AND d.ADMIN_UID=?';
+        const sql = 'SELECT * FROM devices d LEFT JOIN meeting_rooms m ON d.mid=m.mid WHERE d.ADMIN_UID=?';
         try {
             let result = await db.query(sql, [d.uid]);
             let mdata = [];
@@ -161,7 +161,7 @@ function DeviceServer(io, wx) {
                     did: r.DID,
                     mid: r.MID,
                     extra: r.EXTRA,
-                    createTime: r.CREATE_TIME,
+                    createTime: r.CREATE_TIME.valueOf(),
                     mname: r.NAME,
                     mpos: r.POSITION
                 });
@@ -182,7 +182,7 @@ function DeviceServer(io, wx) {
     });
 
     // 删除设备
-    router.use('/grabRoomInfo', async function (req, res) {
+    router.use('/deleteDevice', async function (req, res) {
         let d = tokenManager.parse(req.get('Authorization'));
         let { did } = req.query;
         if (!d.uid) {
